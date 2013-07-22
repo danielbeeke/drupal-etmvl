@@ -86,7 +86,7 @@ function etmvl_tokens($type, $tokens, array $data = array(), array $options = ar
             }
           }
 
-          // Not chained tokens.
+          // Not chained tokens for fields.
           else if ($name == '*hasvalue') {
             // Make it clean.
             try {
