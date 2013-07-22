@@ -1,4 +1,8 @@
 <?php
+/**
+ * @file
+ * Provide tokens with functions.
+ */
 
 /**
  * Implements hook_token_info().
@@ -19,65 +23,84 @@ function etmvl_tokens($type, $tokens, array $data = array(), array $options = ar
   if ($item_token_type = entity_property_list_extract_type($type)) {
     foreach ($tokens as $name => $original) {
       $data_replacements = array();
+
       if (!is_numeric($name)) {
         $parts = explode(':', $name, 2);
         $function = $parts[0];
 
-        if (substr($function, 0, 1) == '*' && $chained_tokens = token_find_with_prefix($tokens, $function)) {
-          $wrapper = !isset($wrapper) ? _entity_token_wrap_data($type, "list<$token_types[$item_token_type]>", $data[$type], $options) : $wrapper;
-          try {
-            // For each data boject that is referenced inside a field get the value.
-            foreach($data[$type] as $data_item_delta => $data_item) {
-              $data_replacements = array_merge_recursive($data_replacements, token_generate($item_token_type, $chained_tokens, array($item_token_type => $wrapper->get($data_item_delta)->value()), $options));
+        if (substr($function, 0, 1) == '*') {
+          if ($chained_tokens = token_find_with_prefix($tokens, $function)) {
+            $wrapper = !isset($wrapper) ? _entity_token_wrap_data($type, "list<$token_types[$item_token_type]>", $data[$type], $options) : $wrapper;
+            try {
+              // For each data boject that is referenced inside a field get the value.
+              foreach ($data[$type] as $data_item_delta => $data_item) {
+                $data_replacements = array_merge_recursive($data_replacements, token_generate($item_token_type, $chained_tokens, array($item_token_type => $wrapper->get($data_item_delta)->value()), $options));
+              }
+
+              $function_exploded = explode('-', $function);
+              $function_main = $function_exploded[0];
+
+              switch ($function_main) {
+                case '*average':
+                  foreach ($data_replacements as $token => $values) {
+                    $replacements[$token] = 0;
+                    foreach ($values as $value) {
+                      $replacements[$token] = $replacements[$token] + $value;
+                    }
+
+                    $replacements[$token] = $replacements[$token] / count($values);
+                  }
+                  break;
+
+                case '*sum':
+                  foreach ($data_replacements as $token => $values) {
+                    $replacements[$token] = 0;
+                    foreach ($values as $value) {
+                      $replacements[$token] = $replacements[$token] + $value;
+                    }
+                  }
+                  break;
+
+                case '*count':
+                  foreach ($data_replacements as $token => $values) {
+                    $replacements[$token] = count($values);
+                  }
+                  break;
+
+                case '*list':
+                  foreach ($data_replacements as $token => $values) {
+                    if (isset($function_exploded[1])) {
+                      $last = end($values);
+                      unset($values[count($values) - 1]);
+                      $replacements[$token] = implode(', ', $values) . ' ' . $function_exploded[1] . ' ' . $last;
+                    }
+                    else {
+                      $replacements[$token] = implode(', ', $values);
+                    }
+                  }
+                  break;
+              }
             }
-
-            $function_exploded = explode('-', $function);
-            $function_main = $function_exploded[0];
-
-            switch ($function_main) {
-              case '*average':
-                foreach ($data_replacements as $token => $values) {
-                  $replacements[$token] = 0;
-                  foreach ($values as $value) {
-                    $replacements[$token] = $replacements[$token] + $value;
-                  }
-
-                  $replacements[$token] = $replacements[$token] / count($values);
-                }
-                break;
-
-              case '*sum':
-                foreach ($data_replacements as $token => $values) {
-                  $replacements[$token] = 0;
-                  foreach ($values as $value) {
-                    $replacements[$token] = $replacements[$token] + $value;
-                  }
-                }
-                break;
-
-              case '*count':
-                foreach ($data_replacements as $token => $values) {
-                  $replacements[$token] = count($values);
-                }
-                break;
-
-              case '*list':
-                foreach ($data_replacements as $token => $values) {
-                  if (isset($function_exploded[1])) {
-                    $last = end($values);
-                    unset($values[count($values) - 1]);
-                    $replacements[$token] = implode(', ', $values) . ' ' . $function_exploded[1] . ' ' . $last;
-                  }
-                  else {
-                    $replacements[$token] = implode(', ', $values);
-                  }
-                }
-                break;
+            catch (EntityMetadataWrapperException $e) {
+              // If tokens for not existing values are requested, just do nothing.
             }
-
           }
-          catch (EntityMetadataWrapperException $e) {
-            // If tokens for not existing values are requested, just do nothing.
+
+          // Not chained tokens.
+          else if ($name == '*hasvalue') {
+            // Make it clean.
+            try {
+              if (!empty($data[$type])) {
+                $replacements[$original] = 1;
+              }
+              else {
+                $replacements[$original] = 0;
+              }
+            }
+            catch (EntityMetadataWrapperException $e) {
+              // If tokens for not existing values are requested, just do nothing.
+            }
+
           }
         }
       }
